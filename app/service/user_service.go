@@ -1,11 +1,15 @@
 package service
 
 import (
+	"context"
 	"net/http"
 	"pm_go_version/app/constant"
+	"pm_go_version/app/domain"
 	"pm_go_version/app/domain/entity"
 	"pm_go_version/app/pkg"
+	"pm_go_version/app/pkg/cache"
 	"pm_go_version/app/repository"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -15,10 +19,13 @@ type UserService interface {
 	LoginUser(c *gin.Context)
 	SignupUser(c *gin.Context)
 	GetUserInfo(c *gin.Context)
+	GetUserByID(ctx context.Context, id string) (*domain.User, error)
+	UpdateUser(ctx context.Context, user *domain.User) error
 }
 
 type UserServiceImpl struct {
-	Ur repository.UserRepository
+	Ur    repository.UserRepository
+	cache cache.Cache
 }
 
 func (usv *UserServiceImpl) GetUserInfo(c *gin.Context) {
@@ -103,6 +110,48 @@ func (usv *UserServiceImpl) SignupUser(c *gin.Context) {
 
 func UserServiceInit(userRepository repository.UserRepository) *UserServiceImpl {
 	return &UserServiceImpl{
-		Ur: userRepository,
+		Ur:    userRepository,
+		cache: cache.NewRedisCache(),
 	}
+}
+
+func (s *UserServiceImpl) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
+	// 尝试从缓存获取
+	var user domain.User
+	cacheKey := "user:" + id
+	err := s.cache.Get(ctx, cacheKey, &user)
+	if err == nil {
+		return &user, nil
+	}
+
+	// 缓存未命中，从数据库获取
+	user, err = s.Ur.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// 将结果存入缓存，设置过期时间为1小时
+	err = s.cache.Set(ctx, cacheKey, user, time.Hour)
+	if err != nil {
+		// 缓存错误不影响主流程
+	}
+
+	return &user, nil
+}
+
+func (s *UserServiceImpl) UpdateUser(ctx context.Context, user *domain.User) error {
+	// 更新数据库
+	err := s.Ur.Update(ctx, user)
+	if err != nil {
+		return err
+	}
+
+	// 更新缓存
+	cacheKey := "user:" + user.ID
+	err = s.cache.Delete(ctx, cacheKey)
+	if err != nil {
+		// 缓存错误不影响主流程
+	}
+
+	return nil
 }
