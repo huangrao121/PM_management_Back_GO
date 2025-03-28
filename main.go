@@ -14,6 +14,8 @@ func Init() {
 }
 
 func main() {
+	// 初始化 Redis
+
 	port := os.Getenv("PORT")
 
 	init := config.Init()
