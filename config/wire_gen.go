@@ -16,7 +16,7 @@ import (
 // Injectors from wire.go:
 
 func Init() *Initialization {
-	gormDB := ConnectToDB()
+	gormDB := GetGdb()
 	userRepositoryImpl := repository.UserRepositoryInit(gormDB)
 	userServiceImpl := service.UserServiceInit(userRepositoryImpl)
 	userControllerImpl := controller.UserControllerInit(userServiceImpl)
@@ -38,7 +38,7 @@ func Init() *Initialization {
 
 // wire.go:
 
-var db = wire.NewSet(ConnectToDB)
+var db = wire.NewSet(GetGdb)
 
 var userServiceSet = wire.NewSet(service.UserServiceInit, wire.Bind(new(service.UserService), new(*service.UserServiceImpl)))
 

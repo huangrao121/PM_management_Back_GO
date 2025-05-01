@@ -1,1 +1,11 @@
 .env
+
+bin/
+*.exe
+*.test
+*.out
+vendor/ # Unless you have a specific reason to commit it
+.vscode/ # If not sharing project settings
+.idea/   # If not sharing project settings
+
+development_notes.md.env

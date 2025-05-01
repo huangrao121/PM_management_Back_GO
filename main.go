@@ -3,11 +3,13 @@ package main
 import (
 	"log"
 	"os"
-	"pm_go_version/app/pkg/redis"
+	"pm_go_version/app/pkg/redis_config"
 	"pm_go_version/app/router"
 	"pm_go_version/config"
 
 	"github.com/joho/godotenv"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func Init() {
@@ -17,13 +19,10 @@ func Init() {
 
 func main() {
 	// 初始化 Redis
-	err := redis.InitRedis(
-		os.Getenv("REDIS_ADDR"),
-		os.Getenv("REDIS_PASSWORD"),
-		0,
-	)
-	if err != nil {
-		log.Fatalf("Failed to initialize Redis: %v", err)
+	if err := redis_config.InitRedis(); err != nil {
+		log.Warn("Redis failed to initialize, the app will continue to use normal mode: ", err)
+	} else {
+		defer redis_config.CloseRedis()
 	}
 
 	port := os.Getenv("PORT")

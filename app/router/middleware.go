@@ -2,7 +2,11 @@ package router
 
 import (
 	"pm_go_version/app/constant"
+	"pm_go_version/app/domain/entity"
 	"pm_go_version/app/pkg"
+	"pm_go_version/config"
+
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -31,7 +35,7 @@ func CORSMiddleware() gin.HandlerFunc {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, PATCH, GET, PUT, DELETE")
 			c.Writer.Header().Set("Access-Control-Max-Age", "86400") // 24小时
 		}
 
@@ -79,7 +83,124 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// 3. 如果两种方式都失败，返回未授权错误
 		log.Error("Authentication failed: no valid token found in header or cookie")
-		pkg.PanicException(constant.Unauthorized)
+		pkg.PanicException(constant.InvalidRequest)
 		c.Abort()
 	}
 }
+
+func CheckOwnership(paramsKey string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer pkg.PanicHandler(c)
+		log.Info("CheckOwnership middleware called")
+		userIdValue, _ := c.Get("parse_id")
+		userId := int(userIdValue.(uint))
+		if paramsKey == "workspace" {
+			workspaceId, err := strconv.Atoi(c.Param("workspaceId"))
+			if err != nil {
+				log.Error("Invalid parameter value: ", err)
+				pkg.PanicException(constant.InvalidRequest)
+			}
+			if !CheckWorkspaceMembership(userId, workspaceId) {
+				log.Error("User is not member of the workspace")
+				pkg.PanicException(constant.Unauthorized)
+				c.Abort()
+			}
+		} else if paramsKey == "project" {
+			workspaceId, err := strconv.Atoi(c.Param("workspaceId"))
+			if err != nil {
+				log.Error("Invalid parameter value: ", err)
+				pkg.PanicException(constant.InvalidRequest)
+			}
+			projectId, err := strconv.Atoi(c.Param("projectId"))
+			if err != nil {
+				log.Error("Invalid parameter value: ", err)
+				pkg.PanicException(constant.InvalidRequest)
+			}
+			if !CheckProjectMembership(userId, workspaceId, projectId) {
+				log.Error("User is not member of the workspace")
+				pkg.PanicException(constant.Unauthorized)
+			}
+		} else if paramsKey == "task" {
+			taskId, err := strconv.Atoi(c.Param("taskId"))
+			if err != nil {
+				log.Error("Invalid parameter value: ", err)
+				pkg.PanicException(constant.InvalidRequest)
+			}
+			if !CheckTaskMembership(userId, taskId) {
+				log.Error("User is not member of the workspace")
+				pkg.PanicException(constant.Unauthorized)
+				c.Abort()
+			}
+			log.Info("User is member of the workspace")
+		} else if paramsKey == "batchTask" {
+			log.Info("User is member of the workspace")
+		}
+		c.Next()
+	}
+}
+
+func CheckWorkspaceOwnership(userId int, workspaceId int) bool {
+	db := config.GetGdb()
+	var uw entity.UserWorkspace
+	r1 := db.Where("user_id=? AND workspace_id=?", userId, workspaceId).First(&uw)
+	if r1.Error != nil {
+		log.Error("Got an error when check if user have workspaces. Error: ", r1.Error)
+		return false
+	}
+	if uw.UserMember != "Owner" {
+		log.Error("User is not owner to delete workspace. Error: ")
+		return false
+	} else {
+		return true
+	}
+}
+
+func CheckWorkspaceMembership(userId int, workspaceId int) bool {
+	db := config.GetGdb()
+	var userWorkspace entity.UserWorkspace
+	r1 := db.Where("user_id=? AND workspace_id=?", userId, workspaceId).First(&userWorkspace)
+	if r1.Error != nil {
+		log.Error("Got an error when check if user belongs to workspace. Error: ", r1.Error)
+		return false
+	}
+	return true
+}
+
+func CheckProjectMembership(userId int, workspaceId int, projectId int) bool {
+	if !CheckWorkspaceMembership(userId, workspaceId) {
+		log.Error("User is not member of the workspace")
+		return false
+	}
+	db := config.GetGdb()
+	var project entity.Project
+	r1 := db.Where("id=? AND workspace_id=?", projectId, workspaceId).First(&project)
+	if r1.Error != nil {
+		log.Error("Got an error when check if workspace has this project. Error: ", r1.Error)
+		return false
+	}
+	return true
+}
+
+func CheckTaskMembership(userId int, taskId int) bool {
+	db := config.GetGdb()
+	var result map[string]any
+	subQuery := db.Model(&entity.Task{}).Where("id=?", taskId)
+	r1 := db.Debug().Table(`(?) u`, subQuery).
+		Joins("JOIN workspaces w On u.workspace_id = w.id").
+		Joins("JOIN user_workspaces us on u.workspace_id=us.workspace_id").
+		Where("us.user_id=?", userId).Find(&result)
+
+	if r1.Error != nil {
+		log.Error("Got an error when check if workspace has this task. Error: ", r1.Error)
+		return false
+	}
+
+	if len(result) == 0 {
+		log.Error("User is not member of the workspace for the specific task")
+		return false
+	}
+	log.Info("User is member of the workspace for the specific task")
+	return true
+}
+
+// var project constant.Project

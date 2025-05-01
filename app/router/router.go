@@ -14,6 +14,8 @@ func Init(init *config.Initialization) *gin.Engine {
 
 	api := router.Group("/api")
 	{
+		me := api.Group("/me")
+		me.GET("/", AuthMiddleware(), init.Uc.GetMe)
 		user := api.Group("/user")
 		user.POST("/login", init.Uc.LoginUser)
 		user.POST("/signup", init.Uc.SignupUser)
@@ -41,10 +43,12 @@ func Init(init *config.Initialization) *gin.Engine {
 		projects.PATCH("/:workspaceId/:projectId", AuthMiddleware(), init.Pc.UpdateProjectById)
 
 		tasks := api.Group("/tasks")
-		tasks.GET("/:workspaceId", AuthMiddleware(), init.Tc.GetListofTasks)
+		tasks.GET("/workspace/:workspaceId", AuthMiddleware(), init.Tc.GetListofTasks)
 		tasks.POST("/", AuthMiddleware(), init.Tc.CreateTask)
-		// tasks.PATCH("/:workspaceId/:projectId/:taskId", AuthMiddleware(), init.Tc.UpdateTaskById)
-		// tasks.DELETE("/:workspaceId/:projectId/:taskId", AuthMiddleware(), init.Tc.DeleteTaskById)
+		tasks.GET("/:taskId", AuthMiddleware(), init.Tc.GetTaskById)
+		tasks.PATCH("/:taskId", AuthMiddleware(), init.Tc.UpdateTaskById)
+		tasks.DELETE("/:taskId", AuthMiddleware(), init.Tc.DeleteTaskById)
+		tasks.PATCH("/batchUpdate", AuthMiddleware(), init.Tc.BatchUpdateTask)
 	}
 	return router
 }
