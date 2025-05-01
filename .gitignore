@@ -8,4 +8,4 @@ vendor/ # Unless you have a specific reason to commit it
 .vscode/ # If not sharing project settings
 .idea/   # If not sharing project settings
 
-development.md
+development_notes.md
