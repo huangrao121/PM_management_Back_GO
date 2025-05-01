@@ -7,6 +7,7 @@ import (
 )
 
 type UserController interface {
+	GetMe(*gin.Context)
 	LoginUser(*gin.Context)
 	SignupUser(*gin.Context)
 	GetUserInfo(*gin.Context)
@@ -14,6 +15,10 @@ type UserController interface {
 
 type UserControllerImpl struct {
 	Svc service.UserService
+}
+
+func (u *UserControllerImpl) GetMe(c *gin.Context) {
+	u.Svc.GetMe(c)
 }
 
 func (u *UserControllerImpl) LoginUser(c *gin.Context) {

@@ -12,6 +12,7 @@ import (
 )
 
 type UserService interface {
+	GetMe(c *gin.Context)
 	LoginUser(c *gin.Context)
 	SignupUser(c *gin.Context)
 	GetUserInfo(c *gin.Context)
@@ -19,6 +20,13 @@ type UserService interface {
 
 type UserServiceImpl struct {
 	Ur repository.UserRepository
+}
+
+func (usv *UserServiceImpl) GetMe(c *gin.Context) {
+	defer pkg.PanicHandler(c)
+	c.JSON(http.StatusOK, pkg.BuildResponse(constant.Success, gin.H{
+		"message": "Verified",
+	}))
 }
 
 func (usv *UserServiceImpl) GetUserInfo(c *gin.Context) {

@@ -1,10 +1,13 @@
 package service
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"pm_go_version/app/constant"
 	"pm_go_version/app/domain/entity"
 	"pm_go_version/app/pkg"
+	"pm_go_version/app/pkg/redis_config"
 	"pm_go_version/app/repository"
 	"strconv"
 
@@ -21,7 +24,8 @@ type ProjectService interface {
 }
 
 type ProjectServiceImpl struct {
-	Pr repository.ProjectRepository
+	Pr  repository.ProjectRepository
+	Rdb *redis_config.RedisCache
 }
 
 func (ps *ProjectServiceImpl) GetListofProjects(c *gin.Context) {
@@ -29,10 +33,20 @@ func (ps *ProjectServiceImpl) GetListofProjects(c *gin.Context) {
 	defer pkg.PanicHandler(c)
 	user_id, workspace_id := GetUnWIds(c)
 
-	result, err := ps.Pr.GetListofProjects(user_id, workspace_id)
+	redisKey := fmt.Sprintf("user:%v workspace:%v projects", user_id, workspace_id)
+	data, err := ps.Rdb.GetStructValue(c, redisKey, func() (interface{}, error) {
+		return ps.Pr.GetListofProjects(user_id, workspace_id)
+	})
+	//result, err := ps.Pr.GetListofProjects(user_id, workspace_id)
 	if err != nil {
 		log.Error("Failed to get all projects of a workspace, error is: ", err)
 		pkg.PanicException(constant.DataNotFound)
+	}
+
+	var result interface{}
+	if err := json.Unmarshal([]byte(data), &result); err != nil {
+		log.Error("Failed to unmarshal workspace data: ", err)
+		pkg.PanicException(constant.UnknownError)
 	}
 	c.JSON(http.StatusOK, pkg.BuildResponse(constant.Success, result))
 }
@@ -149,5 +163,8 @@ func (ps *ProjectServiceImpl) UpdateProjectById(c *gin.Context) {
 }
 
 func ProjectServiceInit(pr repository.ProjectRepository) *ProjectServiceImpl {
-	return &ProjectServiceImpl{Pr: pr}
+	return &ProjectServiceImpl{
+		Pr:  pr,
+		Rdb: redis_config.GetRedisCache(),
+	}
 }

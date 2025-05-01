@@ -81,8 +81,26 @@ type Task struct {
 	Description string    `gorm:"column:description" json:"description" form:"description"`
 	DueDate     time.Time `gorm:"column:due_date;not null" json:"due_date" form:"due_date"`
 	Status      string    `gorm:"column:status;type:varchar(20);check:status IN ('BACKLOG','TODO','IN_PROGRESS','IN_REVIEW','DONE','BLOCKED')" json:"status" form:"status"`
-	Position    int       `gorm:"column:position;not null" json:"position" form:"position"`
+	Position    int       `gorm:"column:position;not null;default:0" json:"position" form:"position"`
 	BaseModel
+}
+
+type UpdateTask struct {
+	Name        *string    `json:"name"`
+	ProjectId   *uint      `json:"project_id"`
+	WorkspaceId *uint      `json:"workspace_id"`
+	AssigneeId  *uint      `json:"assignee_id"`
+	Description *string    `json:"description"`
+	DueDate     *time.Time `json:"due_date"`
+	Status      *string    `json:"status"`
+}
+
+type TaskInfo struct {
+	Task
+	ProjectName   string `json:"project_name"`
+	AssigneeName  string `json:"assignee_name"`
+	AssigneeEmail string `json:"assignee_email"`
+	ProjectImage  string `json:"project_image"`
 }
 
 func (user *User) BeforeUpdate(tx *gorm.DB) (err error) {
@@ -108,6 +126,15 @@ func (t *Task) ValidateStatus() error {
 }
 
 // BeforeSave validates the task status before saving to database
-func (t *Task) BeforeSave(tx *gorm.DB) error {
+func (t *Task) BeforeCreate(tx *gorm.DB) error {
 	return t.ValidateStatus()
+}
+
+func (ut *UpdateTask) BeforeUpdate(tx *gorm.DB) error {
+	for _, validStatus := range ValidTaskStatuses {
+		if ut.Status != nil && *ut.Status == validStatus {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid task status")
 }

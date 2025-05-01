@@ -17,7 +17,7 @@ type WorkspaceRepository interface {
 	DeleteWorkspaceById(user_id uint, workspace_id uint) (bool, error)
 	GetImageName(user_id uint, workspace_id uint) (string, error)
 	UpdateWorkspaceById(user_id uint, request *dto.WorkspaceDTO) (bool, error)
-	GetSingleWorkspaceById(user_id uint, workspace_id uint) (dto.WorkspaceDTO, error)
+	GetSingleWorkspaceById(user_id uint, workspace_id uint) (entity.Workspace, error)
 	ResetInvite(user_id uint, workspace_id uint, invite_code string) (bool, error)
 	JoinWorkspace(user_id uint, workspace_id uint, code string) (*entity.UserWorkspace, error)
 	GetWorkspaceInfo(workspace_id uint) (*entity.Workspace, error)
@@ -143,24 +143,26 @@ func (wr *WorkspaceRepositoryImpl) UpdateWorkspaceById(user_id uint, request *dt
 	return true, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) GetSingleWorkspaceById(user_id uint, workspace_id uint) (dto.WorkspaceDTO, error) {
-	var uw entity.UserWorkspace
-	var workspace dto.WorkspaceDTO
+func (wr *WorkspaceRepositoryImpl) GetSingleWorkspaceById(user_id uint, workspace_id uint) (entity.Workspace, error) {
+	// var uw entity.UserWorkspace
+	var workspace entity.Workspace
 	err := wr.db.Transaction(func(db *gorm.DB) error {
-		if isOwner, _ := wr.checkOwner(uw, user_id, workspace_id); !isOwner {
-			log.Error("User is not owner to delete workspace. Error: ")
-			return errors.New("user is not owner")
-		} else {
-			r2 := db.Table("workspaces").Where("id=?", workspace_id).Scan(&workspace)
+		// if isOwner, _ := wr.checkOwner(uw, user_id, workspace_id); !isOwner {
+		// 	log.Error("User is not owner to delete workspace. Error: ")
+		// 	return errors.New("user is not owner")
+		// } else {
+			r2 := db.Table("workspaces").
+				Where("id = ?", workspace_id).
+				Scan(&workspace)
 			if r2.Error != nil {
 				log.Error("Got and error when user try to delete the workspace. Error: ", r2.Error)
 				return r2.Error
 			}
 			return nil
-		}
+		// }
 	})
 	if err != nil {
-		return dto.WorkspaceDTO{}, err
+		return entity.Workspace{}, err
 	}
 	return workspace, nil
 }

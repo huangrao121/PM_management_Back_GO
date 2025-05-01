@@ -1,14 +1,16 @@
 package service
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"os"
 	"pm_go_version/app/constant"
 	"pm_go_version/app/domain/dto"
 	"pm_go_version/app/domain/entity"
 	"pm_go_version/app/pkg"
+	"pm_go_version/app/pkg/redis_config"
 	"pm_go_version/app/repository"
-
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +34,8 @@ type WorkspaceService interface {
 }
 
 type WorkspaceServiceImpl struct {
-	Wr repository.WorkspaceRepository
+	Wr  repository.WorkspaceRepository
+	Rdb *redis_config.RedisCache
 }
 
 func (ws *WorkspaceServiceImpl) GetListofWorkspaces(c *gin.Context) {
@@ -92,11 +95,22 @@ func (ws *WorkspaceServiceImpl) GetWorkspacesById(c *gin.Context) {
 	}
 
 	userId, _ := ConvertAnyToInt(value)
-	result, err := ws.Wr.GetWorkspacesById(userId)
+	redisKey := "user:" + fmt.Sprintf("%v", value) + "workspace"
+
+	var result interface{}
+	data, err := ws.Rdb.GetStructValue(c, redisKey, func() (interface{}, error) {
+		return ws.Wr.GetWorkspacesById(userId)
+	})
 	if err != nil {
-		log.Error("Error try to get list of workspaces by user id")
+		log.Error("Failed to get workspace data: ", err)
 		pkg.PanicException(constant.UnknownError)
 	}
+
+	if err := json.Unmarshal([]byte(data), &result); err != nil {
+		log.Error("Failed to unmarshal workspace data: ", err)
+		pkg.PanicException(constant.UnknownError)
+	}
+
 	c.JSON(http.StatusOK, pkg.BuildResponse(constant.Success, result))
 }
 
@@ -202,14 +216,21 @@ func (ws *WorkspaceServiceImpl) GetSingleWorkspaceById(c *gin.Context) {
 		log.Error("Error Try to parse the workspace id to integer, error: ", err)
 		pkg.PanicException(constant.UnknownError)
 	}
-
-	data, err := ws.Wr.GetSingleWorkspaceById(userId, uint(num))
-	log.Info("The workspace details is: ", data)
+	redisKey := "user:" + fmt.Sprintf("%v", value) + "workspace:" + fmt.Sprintf("%v", workspace_id)
+	data, err := ws.Rdb.GetStructValue(c, redisKey, func() (interface{}, error) {
+		return ws.Wr.GetSingleWorkspaceById(userId, uint(num))
+	})
+	//data, err := ws.Wr.GetSingleWorkspaceById(userId, uint(num))
 	if err != nil {
 		log.Error("Failed to find the workspace, error: ", err)
 		pkg.PanicException(constant.UnknownError)
 	}
-	c.JSON(http.StatusOK, pkg.BuildResponse(constant.Success, data))
+	var result interface{}
+	if err := json.Unmarshal([]byte(data), &result); err != nil {
+		log.Error("Failed to unmarshal workspace data: ", err)
+		pkg.PanicException(constant.UnknownError)
+	}
+	c.JSON(http.StatusOK, pkg.BuildResponse(constant.Success, result))
 }
 
 func (ws *WorkspaceServiceImpl) ResetInvite(c *gin.Context) {
@@ -295,9 +316,12 @@ func (ws *WorkspaceServiceImpl) GetWorkspaceInfo(c *gin.Context) {
 		log.Error("Failed to get the workspace info, error: ", err)
 		pkg.PanicException(constant.UnknownError)
 	}
-	c.JSON(http.StatusOK, pkg.BuildResponse(constant.Success, gin.H{
-		"name": result.Name,
-	}))
+	// c.JSON(http.StatusOK, pkg.BuildResponse(constant.Success, gin.H{
+	// 	"name": result.Name,
+	// }))
+	c.JSON(http.StatusOK, pkg.BuildResponse(constant.Success, pkg.BuildResponse(constant.Success,
+		gin.H{"name": result.Name},
+	)))
 }
 
 func ConvertAnyToInt(value any) (uint, bool) {
@@ -320,6 +344,7 @@ func ConvertAnyToString(value any) (string, bool) {
 
 func WorkspaceServiceInit(wr repository.WorkspaceRepository) *WorkspaceServiceImpl {
 	return &WorkspaceServiceImpl{
-		Wr: wr,
+		Wr:  wr,
+		Rdb: redis_config.GetRedisCache(),
 	}
 }

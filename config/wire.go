@@ -11,7 +11,7 @@ import (
 	"github.com/google/wire"
 )
 
-var db = wire.NewSet(ConnectToDB)
+var db = wire.NewSet(GetGdb)
 
 var userServiceSet = wire.NewSet(service.UserServiceInit,
 	wire.Bind(new(service.UserService), new(*service.UserServiceImpl)),
