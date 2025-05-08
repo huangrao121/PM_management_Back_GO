@@ -9,7 +9,7 @@ import (
 type ProjectRepository interface {
 	GetListofProjects(user_id uint, workspace_id uint) ([]entity.Project, error)
 	CreateProject(user_id uint, project *entity.Project) (bool, error)
-	GetProjectById(user_id uint, workspace_id uint, project_id uint) (entity.Project, error)
+	GetProjectById(user_id uint, project_id uint) (entity.Project, error)
 	UpdateProjectById(user_id uint, workspace_id uint, project_id uint, project *entity.Project) (bool, error)
 }
 
@@ -54,10 +54,10 @@ func (pr *ProjectRepositoryImpl) CreateProject(user_id uint, project *entity.Pro
 	return true, nil
 }
 
-func (pr *ProjectRepositoryImpl) GetProjectById(user_id uint, workspace_id uint, project_id uint) (entity.Project, error) {
+func (pr *ProjectRepositoryImpl) GetProjectById(user_id uint, project_id uint) (entity.Project, error) {
 	var project entity.Project
 	r := pr.db.Joins("JOIN user_workspaces ON user_workspaces.workspace_id = projects.workspace_id").
-		Where("user_workspaces.user_id = ? AND projects.workspace_id = ? AND projects.id = ?", user_id, workspace_id, project_id).
+		Where("user_workspaces.user_id = ? AND projects.id = ?", user_id, project_id).
 		First(&project)
 	if r.Error != nil {
 		return entity.Project{}, r.Error

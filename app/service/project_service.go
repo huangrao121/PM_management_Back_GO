@@ -92,12 +92,6 @@ func (ps *ProjectServiceImpl) GetProjectById(c *gin.Context) {
 		pkg.PanicException(constant.UnknownError)
 	}
 
-	workspaceId, err := strconv.ParseUint(c.Param("workspaceId"), 10, 32)
-	if err != nil {
-		log.Error("Invalid workspace ID format: ", err)
-		pkg.PanicException(constant.UnknownError)
-	}
-
 	// 获取并验证用户ID
 	userIDValue, exists := c.Get("parse_id")
 	if !exists {
@@ -111,7 +105,7 @@ func (ps *ProjectServiceImpl) GetProjectById(c *gin.Context) {
 		pkg.PanicException(constant.UnknownError)
 	}
 
-	result, err := ps.Pr.GetProjectById(userId, uint(workspaceId), uint(projectId))
+	result, err := ps.Pr.GetProjectById(userId, uint(projectId))
 	if err != nil {
 		log.Error("Failed to get project by id: ", err)
 		pkg.PanicException(constant.DataNotFound)

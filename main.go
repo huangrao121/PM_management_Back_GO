@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 	"pm_go_version/app/pkg/redis_config"
 	"pm_go_version/app/router"

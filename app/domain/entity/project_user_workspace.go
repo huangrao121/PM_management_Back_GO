@@ -53,8 +53,14 @@ type Workspace struct {
 	ImageUrl    string `gorm:"column:image_url; unique" json:"image_url"`
 	InviteCode  string `gorm:"column:invite_code;unique;not null" json:"invite_code" form:"invite_code"`
 	//Users       []UserWorkspace `gorm:"foreignKey:WorkspaceID;references:ID"`
-	Projects []Project
+	Projects []Project `gorm:"foreignKey:workspace_id;references:id" json:"-"`
 	BaseModel
+}
+
+type UpdateWorkspace struct {
+	Name       *string `json:"name" form:"name"`
+	ImageUrl   *string `json:"image_url" form:"image_url"`
+	InviteCode *string `json:"invite_code" form:"invite_code"`
 }
 
 type UserWorkspace struct {

@@ -13,14 +13,14 @@ import (
 type WorkspaceRepository interface {
 	GetWorkspaces() ([]entity.Workspace, error)
 	CreateWorkspace(request *entity.Workspace) (uint, error)
-	GetWorkspacesById(id uint) ([]dto.WorkspaceDTO, error)
-	DeleteWorkspaceById(user_id uint, workspace_id uint) (bool, error)
-	GetImageName(user_id uint, workspace_id uint) (string, error)
-	UpdateWorkspaceById(user_id uint, request *dto.WorkspaceDTO) (bool, error)
-	GetSingleWorkspaceById(user_id uint, workspace_id uint) (entity.Workspace, error)
-	ResetInvite(user_id uint, workspace_id uint, invite_code string) (bool, error)
-	JoinWorkspace(user_id uint, workspace_id uint, code string) (*entity.UserWorkspace, error)
-	GetWorkspaceInfo(workspace_id uint) (*entity.Workspace, error)
+	GetWorkspacesById(userId uint) ([]dto.WorkspaceDTO, error)
+	DeleteWorkspaceById(userId uint, workspaceId uint) (bool, error)
+	GetImageName(userId uint, workspaceId uint) (string, error)
+	UpdateWorkspaceById(userId uint, workspaceId int, request *entity.UpdateWorkspace) (bool, error)
+	GetSingleWorkspaceById(userId uint, workspaceId uint) (*dto.WorkspaceDTO, error)
+	ResetInvite(userId uint, workspaceId uint, inviteCode string) (bool, error)
+	JoinWorkspace(userId uint, workspaceId uint, code string) (*entity.UserWorkspace, error)
+	GetWorkspaceInfo(workspaceId uint) (*entity.Workspace, error)
 }
 
 type WorkspaceRepositoryImpl struct {
@@ -48,28 +48,29 @@ func (wr *WorkspaceRepositoryImpl) GetWorkspaces() ([]entity.Workspace, error) {
 	return workspaces, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) GetWorkspacesById(id uint) ([]dto.WorkspaceDTO, error) {
+func (wr *WorkspaceRepositoryImpl) GetWorkspacesById(userId uint) ([]dto.WorkspaceDTO, error) {
 	var result []dto.WorkspaceDTO
 	r := wr.db.
 		Debug().
-		Table("user_workspaces").
-		Select("id, name, creater_id, creater_user_name, image_url").
-		Joins("left join workspaces on user_workspaces.workspace_id = workspaces.id").
+		Table("user_workspaces uw").
+		Select("w.id, w.name, w.creater_id, w.creater_user_name, w.image_url, w.invite_code").
+		Joins("join workspaces w on uw.workspace_id = w.id").
 		Where(
-			"user_workspaces.user_id = ?", id,
+			"uw.user_id = ?", userId,
 		).Scan(&result)
 	if r.Error != nil {
 		log.Error("Got and error when get list of workspaces by id. Error: ", r.Error)
 		return nil, r.Error
 	}
+	log.Debug("workspace result: ", result)
 	return result, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) GetImageName(user_id uint, workspace_id uint) (string, error) {
+func (wr *WorkspaceRepositoryImpl) GetImageName(userId uint, workspaceId uint) (string, error) {
 	var uw entity.UserWorkspace
 	var workspace entity.Workspace
 	err := wr.db.Transaction(func(db *gorm.DB) error {
-		r1 := db.Where("user_id=? AND workspace_id=?", user_id, workspace_id).First(&uw)
+		r1 := db.Where("user_id=? AND workspace_id=?", userId, workspaceId).First(&uw)
 		if r1.Error != nil {
 			log.Error("Got and error when check if user have workspaces. Error: ", r1.Error)
 			return r1.Error
@@ -79,7 +80,7 @@ func (wr *WorkspaceRepositoryImpl) GetImageName(user_id uint, workspace_id uint)
 			log.Error("User is not owner to delete workspace. Error: ")
 			return errors.New("user is not owner")
 		}
-		r2 := db.Where("id=?", workspace_id).First(&workspace)
+		r2 := db.Where("id=?", workspaceId).First(&workspace)
 		if r2.Error != nil {
 			log.Error("No such workspace in database. Error: ", r1.Error)
 			return r2.Error
@@ -93,16 +94,16 @@ func (wr *WorkspaceRepositoryImpl) GetImageName(user_id uint, workspace_id uint)
 	return workspace.ImageUrl, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) DeleteWorkspaceById(user_id uint, workspace_id uint) (bool, error) {
+func (wr *WorkspaceRepositoryImpl) DeleteWorkspaceById(userId uint, workspaceId uint) (bool, error) {
 	var uw entity.UserWorkspace
 	var workspace entity.Workspace
 	err := wr.db.Transaction(func(db *gorm.DB) error {
 
-		if isOwner, _ := wr.checkOwner(uw, user_id, workspace_id); !isOwner {
+		if isOwner, _ := wr.checkOwner(uw, userId, workspaceId); !isOwner {
 			log.Error("User is not owner to delete workspace. Error: ")
 			return errors.New("user is not owner")
 		} else {
-			r2 := db.Where("id=?", workspace_id).Delete(&workspace)
+			r2 := db.Where("id=?", workspaceId).Delete(&workspace)
 			if r2.Error != nil {
 				log.Error("Got and error when user try to delete the workspace. Error: ", r2.Error)
 				return r2.Error
@@ -116,81 +117,46 @@ func (wr *WorkspaceRepositoryImpl) DeleteWorkspaceById(user_id uint, workspace_i
 	return true, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) UpdateWorkspaceById(user_id uint, request *dto.WorkspaceDTO) (bool, error) {
-	var uw entity.UserWorkspace
-	err := wr.db.Transaction(func(db *gorm.DB) error {
+func (wr *WorkspaceRepositoryImpl) UpdateWorkspaceById(userId uint, workspaceId int, request *entity.UpdateWorkspace) (bool, error) {
 
-		// r1 := db.Where("user_id=? AND workspace_id=?", user_id, request.ID).First(&uw)
-		// if r1.Error != nil {
-		// 	log.Error("Got and error when check if user have workspaces. Error: ", r1.Error)
-		// 	return r1.Error
-		// }
-		if isOwner, _ := wr.checkOwner(uw, user_id, request.ID); !isOwner {
-			log.Error("User is not owner to delete workspace. Error: ")
-			return errors.New("user is not owner")
-		} else {
-			r2 := db.Model(&entity.Workspace{}).Where("id=?", request.ID).Select("name", "image_url").Updates(map[string]interface{}{"name": request.Name, "image_url": request.ImageUrl})
-			if r2.Error != nil {
-				log.Error("Got and error when user try to delete the workspace. Error: ", r2.Error)
-				return r2.Error
-			}
-			return nil
-		}
-	})
-	if err != nil {
-		return false, err
+	r1 := wr.db.Debug().Model(&entity.Workspace{}).
+		Where("id=? and creater_id=?", workspaceId, userId).
+		Updates(*request)
+	if r1.Error != nil {
+		log.Error("Failed to update workspace: ", r1.Error)
+		return false, r1.Error
 	}
 	return true, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) GetSingleWorkspaceById(user_id uint, workspace_id uint) (entity.Workspace, error) {
+func (wr *WorkspaceRepositoryImpl) GetSingleWorkspaceById(userId uint, workspaceId uint) (*dto.WorkspaceDTO, error) {
 	// var uw entity.UserWorkspace
-	var workspace entity.Workspace
-	err := wr.db.Transaction(func(db *gorm.DB) error {
-		// if isOwner, _ := wr.checkOwner(uw, user_id, workspace_id); !isOwner {
-		// 	log.Error("User is not owner to delete workspace. Error: ")
-		// 	return errors.New("user is not owner")
-		// } else {
-			r2 := db.Table("workspaces").
-				Where("id = ?", workspace_id).
-				Scan(&workspace)
-			if r2.Error != nil {
-				log.Error("Got and error when user try to delete the workspace. Error: ", r2.Error)
-				return r2.Error
-			}
-			return nil
-		// }
-	})
-	if err != nil {
-		return entity.Workspace{}, err
+	var result dto.WorkspaceDTO
+	r := wr.db.Model(&entity.Workspace{}).
+		Select("id, name, creater_id, creater_user_name, image_url, invite_code").
+		Joins("join user_workspaces uw on uw.workspace_id=workspaces.id").
+		Where("workspaces.id = ? and uw.user_id=?", workspaceId, userId).
+		Scan(&result)
+	if r.Error != nil {
+		log.Error("Got and error when user try to delete the workspace. Error: ", r.Error)
+		return &dto.WorkspaceDTO{}, r.Error
 	}
-	return workspace, nil
+	return &result, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) ResetInvite(user_id uint, workspace_id uint, invite_code string) (bool, error) {
-	var uw entity.UserWorkspace
-	//var workspace dto.WorkspaceDTO
-	err := wr.db.Transaction(func(db *gorm.DB) error {
-		if isOwner, _ := wr.checkOwner(uw, user_id, workspace_id); !isOwner {
-			log.Error("User is not owner to delete workspace. Error: ")
-			return errors.New("user is not owner")
-		} else {
-			r2 := db.Model(&entity.Workspace{}).Where("id=?", workspace_id).Update("invite_code", invite_code)
-			if r2.Error != nil {
-				log.Error("Got and error when user try to delete the workspace. Error: ", r2.Error)
-				return r2.Error
-			}
-			return nil
-		}
-	})
-	if err != nil {
-		return false, err
+func (wr *WorkspaceRepositoryImpl) ResetInvite(userId uint, workspaceId uint, inviteCode string) (bool, error) {
+	r := wr.db.Debug().Model(&entity.Workspace{}).Where("creater_id=? and id=?", userId, workspaceId).
+		Update("invite_code", inviteCode)
+
+	if r.Error != nil {
+		log.Error("Failed to reset invite code: ", r.Error)
+		return false, r.Error
 	}
 	return true, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) JoinWorkspace(user_id uint, workspace_id uint, code string) (*entity.UserWorkspace, error) {
-	userWorkspace := entity.UserWorkspace{UserID: uint(user_id), WorkspaceID: uint(workspace_id)}
+func (wr *WorkspaceRepositoryImpl) JoinWorkspace(userId uint, workspaceId uint, code string) (*entity.UserWorkspace, error) {
+	userWorkspace := entity.UserWorkspace{UserID: uint(userId), WorkspaceID: uint(workspaceId)}
 	err := wr.db.Transaction(func(db *gorm.DB) error {
 		//var uw entity.UserWorkspace
 		var ws entity.Workspace
@@ -199,7 +165,7 @@ func (wr *WorkspaceRepositoryImpl) JoinWorkspace(user_id uint, workspace_id uint
 			// log.Error("The member have already joined. Error: ", r1.Error)
 			// return r1.Error
 
-			r2 := db.Where("id=?", workspace_id).First(&ws)
+			r2 := db.Where("id=?", workspaceId).First(&ws)
 			if r2.Error != nil {
 				log.Error("Failed to get the related workspace by this id. Error: ", r2.Error)
 				return r2.Error
@@ -220,7 +186,7 @@ func (wr *WorkspaceRepositoryImpl) JoinWorkspace(user_id uint, workspace_id uint
 			log.Error("The member have already joined. Error: ", r1.Error)
 			return r1.Error
 		}
-		// r2 := db.Where("id=?", workspace_id).First(&ws)
+		// r2 := db.Where("id=?", workspaceId).First(&ws)
 		// if r2.Error != nil {
 		// 	log.Error("Failed to get the related workspace by this id. Error: ", r2.Error)
 		// 	return r2.Error
@@ -243,9 +209,9 @@ func (wr *WorkspaceRepositoryImpl) JoinWorkspace(user_id uint, workspace_id uint
 	return &userWorkspace, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) GetWorkspaceInfo(workspace_id uint) (*entity.Workspace, error) {
+func (wr *WorkspaceRepositoryImpl) GetWorkspaceInfo(workspaceId uint) (*entity.Workspace, error) {
 	var ws entity.Workspace
-	r1 := wr.db.Select("name").Where("id=?", workspace_id).First(&ws)
+	r1 := wr.db.Select("name").Where("id=?", workspaceId).First(&ws)
 	if r1.Error != nil {
 		log.Error("Got and error when check if user have workspaces. Error: ", r1.Error)
 		return &entity.Workspace{}, r1.Error
@@ -253,8 +219,8 @@ func (wr *WorkspaceRepositoryImpl) GetWorkspaceInfo(workspace_id uint) (*entity.
 	return &ws, nil
 }
 
-func (wr *WorkspaceRepositoryImpl) checkOwner(uw entity.UserWorkspace, user_id uint, workspace_id uint) (bool, error) {
-	r1 := wr.db.Where("user_id=? AND workspace_id=?", user_id, workspace_id).First(&uw)
+func (wr *WorkspaceRepositoryImpl) checkOwner(uw entity.UserWorkspace, userId uint, workspaceId uint) (bool, error) {
+	r1 := wr.db.Where("user_id=? AND workspace_id=?", userId, workspaceId).First(&uw)
 	if r1.Error != nil {
 		log.Error("Got and error when check if user have workspaces. Error: ", r1.Error)
 		return false, r1.Error
@@ -267,9 +233,9 @@ func (wr *WorkspaceRepositoryImpl) checkOwner(uw entity.UserWorkspace, user_id u
 	}
 }
 
-func checkOwnerE(db *gorm.DB, user_id uint, workspace_id uint) (bool, error) {
+func checkOwnerE(db *gorm.DB, userId uint, workspaceId uint) (bool, error) {
 	var uw entity.UserWorkspace
-	r1 := db.Where("user_id=? AND workspace_id=?", user_id, workspace_id).First(&uw)
+	r1 := db.Where("user_id=? AND workspace_id=?", userId, workspaceId).First(&uw)
 	if r1.Error != nil {
 		log.Error("Got and error when check if user have workspaces. Error: ", r1.Error)
 		return false, r1.Error

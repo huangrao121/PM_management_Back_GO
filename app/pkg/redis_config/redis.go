@@ -76,6 +76,7 @@ func (rc *RedisCache) GetStructValue(
 			return "", err
 		}
 		jsonData, err := json.Marshal(value)
+		log.Debug("jsonData: ", string(jsonData))
 		if err != nil {
 			return "", fmt.Errorf("failed to serialize: %v", err)
 		}

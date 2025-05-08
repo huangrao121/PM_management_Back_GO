@@ -26,18 +26,19 @@ func (uwr *UserWorkspaceRepositoryImpl) GetListofMembersByWorkspaceId(user_id ui
 	// 	log.Error("User is not owner to delete workspace. Error: ")
 	// 	return []dto.MembersDTO{}, errors.New("user is not owner")
 	// }
-	isMember, err := CheckMember(uwr.db, user_id, workspace_id)
-	if !isMember {
-		log.Error("Got and error when get list of workspaces by id. Error: ", err)
-		return nil, err
-	}
-	r := uwr.db.
-		Debug().
-		Table("(?) as uw", uwr.db.Model(&entity.UserWorkspace{}).
-			Select("user_id", "user_member").
-			Where("workspace_id=?", workspace_id)).
-		Select("user_id, user_member, username, email").
-		Joins("left join users on uw.user_id=users.id").
+	// r := uwr.db.
+	// 	Debug().
+	// 	Table("(?) as uw", uwr.db.Model(&entity.UserWorkspace{}).
+	// 		Select("user_id", "user_member").
+	// 		Where("workspace_id=?", workspace_id)).
+	// 	Select("user_id, user_member, username, email").
+	// 	Joins("left join users on uw.user_id=users.id").
+	// 	Scan(&members)
+	r := uwr.db.Model(&entity.UserWorkspace{}).
+		Joins("join workspaces on user_workspaces.workspace_id = workspaces.id").
+		Joins("join users on user_workspaces.user_id = users.id").
+		Where("user_workspaces.user_id = ? AND user_workspaces.workspace_id = ?", user_id, workspace_id).
+		Select("user_workspaces.user_id, user_workspaces.user_member, users.username, users.email").
 		Scan(&members)
 	if r.Error != nil {
 		log.Error("Got and error when get list of workspaces by id. Error: ", r.Error)

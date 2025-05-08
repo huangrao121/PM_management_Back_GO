@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"pm_go_version/app/constant"
-	"pm_go_version/app/domain/dto"
 	"pm_go_version/app/domain/entity"
 	"pm_go_version/app/pkg"
 	"pm_go_version/app/pkg/redis_config"
@@ -156,20 +155,20 @@ func (ws *WorkspaceServiceImpl) UpdateWorkspaceById(c *gin.Context) {
 	userId, _ := ConvertAnyToInt(value)
 
 	//Convert workspace id from string to uint
-	num, err := strconv.ParseInt(workspace_id, 10, 64)
+	workspaceId, err := strconv.Atoi(workspace_id)
 	if err != nil {
 		log.Error("Error Try to parse the workspace id to integer, error: ", err)
 		pkg.PanicException(constant.UnknownError)
 	}
 
-	var request dto.WorkspaceDTO
+	var request entity.UpdateWorkspace
 	if err := c.ShouldBind(&request); err != nil {
 		log.Error("Error when try to bind the form format to struct, error is: ", err)
 		pkg.PanicException(constant.UnknownError)
 	}
 
-	request.ID = uint(num)
-	oldFileName, err2 := ws.Wr.GetImageName(userId, uint(num))
+	//request.ID = uint(num)
+	oldFileName, err2 := ws.Wr.GetImageName(userId, uint(workspaceId))
 	if err2 != nil {
 		log.Error("Failed to fetch the file name, error is: ", err)
 		pkg.PanicException(constant.UnknownError)
@@ -180,17 +179,17 @@ func (ws *WorkspaceServiceImpl) UpdateWorkspaceById(c *gin.Context) {
 		log.Error("Failed to save the updated image file to local disk, error is: ", err)
 		pkg.PanicException(constant.UnknownError)
 	}
-	request.ImageUrl = newFileName
-
+	request.ImageUrl = &newFileName
+	log.Debug("request: ", request)
 	//Query the update content to the database
-	isSuccess, _ := ws.Wr.UpdateWorkspaceById(userId, &request)
+	isSuccess, _ := ws.Wr.UpdateWorkspaceById(userId, workspaceId, &request)
 	if !isSuccess {
 		log.Error("Failed to save the updated image file to local disk, error is: ", err)
 		pkg.PanicException(constant.UnknownError)
 	} else {
 		os.Remove("public/" + oldFileName)
 		c.JSON(http.StatusOK, pkg.BuildResponse(constant.Success, gin.H{
-			"workspaceID": num,
+			"workspaceID": workspaceId,
 			"name":        request.Name,
 			"image_url":   request.ImageUrl,
 		}))
