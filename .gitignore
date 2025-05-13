@@ -11,4 +11,6 @@ vendor/ # Unless you have a specific reason to commit it
 public/
 tmp/
 
+**/.DS_Store
+
 development_notes.md
