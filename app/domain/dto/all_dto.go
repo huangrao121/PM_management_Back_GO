@@ -31,3 +31,11 @@ type TaskDragDTO struct {
 	Status   *string `json:"status" binding:"required"`
 	Position *int    `json:"position" binding:"required,gte=0"`
 }
+
+type AiRequest struct {
+	Message string `json:"message"`
+}
+
+type AiResponse struct {
+	Result string `json:"result"`
+}

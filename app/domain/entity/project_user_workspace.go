@@ -50,7 +50,7 @@ type Workspace struct {
 	CreaterID uint `gorm:"column:creater_id" json:"creater_id" form:"creater_id"`
 	//CreaterName string `gorm:"column:creater_user_name" json:"creater_user_name" form:"creater_user_name" binding:"required"`
 	CreaterName string `gorm:"column:creater_user_name" json:"creater_user_name" form:"creater_user_name"`
-	ImageUrl    string `gorm:"column:image_url; unique" json:"image_url"`
+	ImageUrl    string `gorm:"column:image_url" json:"image_url"`
 	InviteCode  string `gorm:"column:invite_code;unique;not null" json:"invite_code" form:"invite_code"`
 	//Users       []UserWorkspace `gorm:"foreignKey:WorkspaceID;references:ID"`
 	Projects []Project `gorm:"foreignKey:workspace_id;references:id" json:"-"`
@@ -72,7 +72,7 @@ type UserWorkspace struct {
 type Project struct {
 	ID          uint   `gorm:"column:id;primaryKey;autoIncrement;unique" json:"id"`
 	Name        string `gorm:"column:name;not null" json:"name" form:"name"`
-	ImageUrl    string `gorm:"column:image_url; unique" json:"image_url" form:"image_url"`
+	ImageUrl    string `gorm:"column:image_url" json:"image_url" form:"image_url"`
 	WorkspaceId uint   `gorm:"column:workspace_id" json:"workspace_id" form:"workspace_id"`
 	Tasks       []Task `gorm:"foreignKey:ProjectId;references:ID"`
 	BaseModel

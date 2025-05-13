@@ -18,8 +18,8 @@ func CORSMiddleware() gin.HandlerFunc {
 		// 允许的域名列表
 		allowedOrigins := []string{
 			"http://localhost:3000", // React开发环境
-			//"http://localhost:5173",   // Vite开发环境
-			//"https://your-domain.com", // 生产环境域名
+			"http://localhost:5173", // Vite开发环境
+			// 生产环境域名
 		}
 
 		origin := c.Request.Header.Get("Origin")
@@ -30,13 +30,21 @@ func CORSMiddleware() gin.HandlerFunc {
 				break
 			}
 		}
-
+		log.Info("origin is: ", origin)
 		if allowed {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+			c.Writer.Header().Set("Access-Control-Allow-Headers",
+				"Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, "+
+					"Authorization, accept, origin, Cache-Control, X-Requested-With, "+
+					"Accept-Language, Cookie, DNT, Host, Pragma, Referer, "+
+					"Sec-Ch-Ua, Sec-Ch-Ua-Mobile, Sec-Ch-Ua-Platform, "+
+					"Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site, User-Agent")
 			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, PATCH, GET, PUT, DELETE")
 			c.Writer.Header().Set("Access-Control-Max-Age", "86400") // 24小时
+		} else {
+			log.Warn("Origin not allowed:", origin)
+			log.Info("Allowed origins:", allowedOrigins)
 		}
 
 		if c.Request.Method == "OPTIONS" {
@@ -55,7 +63,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// 1. 首先检查Authorization header
 		token := c.GetHeader("Authorization")
 		if len(token) > 7 {
-			claims, err := pkg.Verfiy(token[7:])
+			claims, err := pkg.Verify(token[7:])
 			if err == nil {
 				log.Info("Token verified from Authorization header")
 				c.Set("parse_id", claims.ID)
@@ -70,7 +78,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		cookieToken, err := c.Cookie("token")
 		//log.Info("cookieToken is: ", cookieToken)
 		if err == nil && cookieToken != "" {
-			claims, err := pkg.Verfiy(cookieToken)
+			claims, err := pkg.Verify(cookieToken)
 			if err == nil {
 				log.Info("Token verified from cookie")
 				c.Set("parse_id", claims.ID)

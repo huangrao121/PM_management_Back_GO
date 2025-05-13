@@ -29,7 +29,7 @@ func GetGdb() *gorm.DB {
 			log.Fatal("Failed to connect to database")
 		}
 		gdb.SetupJoinTable(&entity.User{}, "Workspaces", &entity.UserWorkspace{})
-		gdb.AutoMigrate(&entity.User{}, &entity.UserWorkspace{}, &entity.Workspace{}, &entity.Project{}, &entity.Task{})
+		gdb.AutoMigrate(&entity.User{}, &entity.UserWorkspace{}, &entity.Workspace{}, &entity.Project{}, &entity.Task{}, &entity.OAuthIdentity{})
 	})
 	return gdb
 }

@@ -71,8 +71,8 @@ func (ts *TaskServiceImpl) GetListofTasks(c *gin.Context) {
 
 	userIdValue, _ := c.Get("parse_id")
 	userId := int(userIdValue.(uint))
-
-	result, err := ts.Tr.GetListofTasks(taskQuery, uint(workspaceId), userId)
+	log.Debug("Task Query: ", taskQuery)
+	result, err := ts.Tr.GetListofTasks(&taskQuery, uint(workspaceId), userId)
 	if err != nil {
 		log.Error("Failed to get list of tasks: ", err)
 		pkg.PanicException(constant.UnknownError)

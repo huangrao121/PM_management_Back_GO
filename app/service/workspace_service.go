@@ -61,10 +61,15 @@ func (ws *WorkspaceServiceImpl) CreateWorkspace(c *gin.Context) {
 	}
 	userId, _ := ConvertAnyToInt(value)
 
-	newFileName, save_err := SavetoLocalWithNewName(c, "workspace_image", "workspace_image")
-	if save_err != nil {
-		log.Error("Error when try to bind the form format to struct, error is: ", save_err)
-		pkg.PanicException(constant.UnknownError)
+	newFileNameUrl := ""
+	_, _, err := c.Request.FormFile("workspace_image")
+	if err == nil {
+		newFileName, save_err := SavetoLocalWithNewName(c, "workspace_image", "workspace_image")
+		if save_err != nil {
+			log.Error("Error when try to bind the form format to struct, error is: ", save_err)
+			pkg.PanicException(constant.UnknownError)
+		}
+		newFileNameUrl = newFileName
 	}
 
 	var request entity.Workspace
@@ -75,7 +80,7 @@ func (ws *WorkspaceServiceImpl) CreateWorkspace(c *gin.Context) {
 	name, _ := ConvertAnyToString(createrName)
 	request.CreaterID = userId
 	request.CreaterName = name
-	request.ImageUrl = newFileName
+	request.ImageUrl = newFileNameUrl
 	request.InviteCode = pkg.GenerateInviteCode(10)
 	id, _ := ws.Wr.CreateWorkspace(&request)
 

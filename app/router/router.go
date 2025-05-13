@@ -49,6 +49,15 @@ func Init(init *config.Initialization) *gin.Engine {
 		tasks.PATCH("/:taskId", AuthMiddleware(), init.Tc.UpdateTaskById)
 		tasks.DELETE("/:taskId", AuthMiddleware(), init.Tc.DeleteTaskById)
 		tasks.PATCH("/batchUpdate", AuthMiddleware(), init.Tc.BatchUpdateTask)
+
+		//aiAgent := api.Group("/aiAgent")
+		//aiAgent.POST("/generateTask", AuthMiddleware(), init.Ai.GenerateTask)
+
+		oauth := api.Group("/OAuth")
+		oauth.GET("/github/callback", init.Uc.GithubCallback)
+		oauth.GET("/google/callback", init.Uc.GoogleCallback)
+		oauth.GET("/github/login", init.Uc.GithubLogin)
+		oauth.GET("/google/login", init.Uc.GoogleLogin)
 	}
 	return router
 }

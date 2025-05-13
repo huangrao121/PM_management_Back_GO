@@ -1,13 +1,19 @@
 package service
 
 import (
+	"encoding/json"
 	"net/http"
+	"os"
 	"pm_go_version/app/constant"
-
 	"pm_go_version/app/domain/entity"
 	"pm_go_version/app/pkg"
 	"pm_go_version/app/pkg/cache"
 	"pm_go_version/app/repository"
+	"pm_go_version/app/utils"
+
+	"golang.org/x/oauth2"
+	//"golang.org/x/oauth2/github"
+	"golang.org/x/oauth2/google"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -18,11 +24,17 @@ type UserService interface {
 	LoginUser(c *gin.Context)
 	SignupUser(c *gin.Context)
 	GetUserInfo(c *gin.Context)
+	GoogleLogin(c *gin.Context)
+	GoogleCallback(c *gin.Context, code, state, cookieState string)
+	// GithubLogin(c *gin.Context)
+	// GithubCallback(c *gin.Context)
 }
 
 type UserServiceImpl struct {
-	Ur    repository.UserRepository
-	cache cache.Cache
+	Ur           repository.UserRepository
+	cache        cache.Cache
+	GoogleConfig *oauth2.Config
+	GithubConfig *oauth2.Config
 }
 
 func (usv *UserServiceImpl) GetMe(c *gin.Context) {
@@ -112,10 +124,100 @@ func (usv *UserServiceImpl) SignupUser(c *gin.Context) {
 
 }
 
+func (usv *UserServiceImpl) GoogleLogin(c *gin.Context) {
+	defer pkg.PanicHandler(c)
+	log.Info("Start to executing google login process")
+	state := utils.GenerateSecureState()
+	c.SetCookie("oauth_state", state, 60*60, "/", "localhost", false, true)
+	authUrl := usv.GoogleConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	c.Redirect(http.StatusTemporaryRedirect, authUrl)
+}
+
+func (usv *UserServiceImpl) GoogleCallback(c *gin.Context, code, state, cookieState string) {
+	log.Info("Start to executing google callback process")
+	if state != cookieState {
+		log.Error("Invalid state")
+		c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/login?error=invalid_state")
+		return
+	}
+	token, err := usv.GoogleConfig.Exchange(c.Request.Context(), code)
+	if err != nil {
+		log.Error("Failed to exchange code for token", err)
+		c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/login?error=failed_to_exchange_code_for_token")
+		return
+	}
+	client := usv.GoogleConfig.Client(c.Request.Context(), token)
+	response, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
+	if err != nil {
+		log.Error("Failed to get user info", err)
+		c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/login?error=failed_to_get_user_info")
+		return
+	}
+	defer response.Body.Close()
+
+	var userInfo map[string]any
+	json.NewDecoder(response.Body).Decode(&userInfo)
+	user, getErr := usv.Ur.GetUserByEmail(userInfo["email"].(string))
+	if getErr == nil {
+		_, hasErr := usv.Ur.GetOAuthIdentity(userInfo["email"].(string), userInfo["sub"].(string), "google")
+		if hasErr == nil {
+			jwtToken, err := pkg.GenerateJWT(user)
+			if err != nil {
+				log.Error("Failed to generate JWT token", err)
+				c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/login?error=failed_to_generate_JWT_token")
+				return
+			}
+			c.SetCookie("token", jwtToken, (24 * 60 * 60), "/", "localhost", false, true)
+			c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/")
+			return
+		}
+
+		// Has user but not oauth identity
+		tempToken, err := pkg.GenerateTempJWT(userInfo["email"].(string), userInfo["name"].(string), userInfo["sub"].(string), "google")
+		if err != nil {
+			log.Error("Failed to generate temp JWT token", err)
+			c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/login?error=failed_to_generate_temp_JWT_token")
+			return
+		}
+		c.SetCookie("temp_token", tempToken, (30 * 60), "/", "localhost", false, true)
+		c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/oauth/binding")
+		return
+	}
+
+	user1, err := usv.Ur.CreateUserOAuthIdentity(userInfo["email"].(string), userInfo["name"].(string), userInfo["sub"].(string), "google")
+	if err != nil {
+		log.Error("Failed to create user oauth identity", err)
+		c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/login?error=failed_to_create_user_and_oauth_identity")
+		return
+	}
+	jwtToken, err := pkg.GenerateJWT(user1)
+	if err != nil {
+		log.Error("Failed to generate JWT token", err)
+		c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/login?error=failed_to_generate_JWT_token")
+		return
+	}
+	c.SetCookie("token", jwtToken, (24 * 60 * 60), "/", "localhost", false, true)
+	c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/")
+}
+
 func UserServiceInit(userRepository repository.UserRepository) *UserServiceImpl {
 	return &UserServiceImpl{
 		Ur:    userRepository,
 		cache: cache.NewRedisCache(),
+		GoogleConfig: &oauth2.Config{
+			ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+			ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+			RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+			Scopes:       []string{"email", "profile"},
+			Endpoint:     google.Endpoint,
+		},
+		GithubConfig: &oauth2.Config{
+			// ClientID:     os.Getenv("GITHUB_CLIENT_ID"),
+			// ClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
+			// RedirectURL:  os.Getenv("GITHUB_REDIRECT_URL"),
+			// Scopes:       []string{"user:email"},
+			// Endpoint:     github.Endpoint,
+		},
 	}
 }
 

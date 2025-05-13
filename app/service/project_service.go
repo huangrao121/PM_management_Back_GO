@@ -66,13 +66,16 @@ func (ps *ProjectServiceImpl) CreateProject(c *gin.Context) {
 	//log.Info("The data type is ", reflect.TypeOf(value))
 	userId, _ := ConvertAnyToInt(value)
 
-	newFileName, save_err := SavetoLocalWithNewName(c, "project_image", "project_image")
-	if save_err != nil {
-		log.Error("Error when try to bind the form format to struct, error is: ", save_err)
-		pkg.PanicException(constant.UnknownError)
+	project.ImageUrl = ""
+	_, _, imgErr := c.Request.FormFile("project_image")
+	if imgErr == nil {
+		newFileName, save_err := SavetoLocalWithNewName(c, "project_image", "project_image")
+		if save_err != nil {
+			log.Error("Error when try to bind the form format to struct, error is: ", save_err)
+			pkg.PanicException(constant.UnknownError)
+		}
+		project.ImageUrl = newFileName
 	}
-	project.ImageUrl = newFileName
-	//log.Info(err)
 
 	isCreated, err := ps.Pr.CreateProject(userId, &project)
 	if !isCreated {

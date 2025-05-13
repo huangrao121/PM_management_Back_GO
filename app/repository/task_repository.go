@@ -12,7 +12,7 @@ import (
 type TaskRepository interface {
 	CreateTask(user_id uint, task *entity.Task) (bool, error)
 	CheckMember(user_id uint, workspace_id uint) (bool, error)
-	GetListofTasks(taskQuery entity.Task, workspace_id uint, user_id int) ([]*entity.TaskInfo, error)
+	GetListofTasks(taskQuery *entity.Task, workspace_id uint, user_id int) ([]*entity.TaskInfo, error)
 	DeleteTaskById(taskId int, user_id int) (bool, error)
 	GetTaskById(taskId int, user_id int) (*entity.TaskInfo, error)
 	UpdateTaskById(taskId int, task entity.UpdateTask, user_id int) (bool, error)
@@ -24,13 +24,19 @@ type TaskRepositoryImpl struct {
 }
 
 func (tr *TaskRepositoryImpl) CreateTask(user_id uint, task *entity.Task) (bool, error) {
-	r1 := tr.db.First(&entity.UserWorkspace{}, "user_id = ? AND workspace_id = ?", user_id, uint(task.WorkspaceId))
-	if r1.Error != nil {
-		return false, r1.Error
-	}
-	r2 := tr.db.Create(task)
-	if r2.Error != nil {
-		return false, r2.Error
+	r := tr.db.Transaction(func(db *gorm.DB) error {
+		r1 := db.First(&entity.UserWorkspace{}, "user_id = ? AND workspace_id = ?", user_id, uint(task.WorkspaceId))
+		if r1.Error != nil {
+			return r1.Error
+		}
+		r2 := db.Create(task)
+		if r2.Error != nil {
+			return r2.Error
+		}
+		return nil
+	})
+	if r != nil {
+		return false, r
 	}
 	return true, nil
 }
@@ -43,7 +49,7 @@ func (tr *TaskRepositoryImpl) CheckMember(user_id uint, workspace_id uint) (bool
 	return true, nil
 }
 
-func (tr *TaskRepositoryImpl) GetListofTasks(taskQuery entity.Task, workspace_id uint, user_id int) ([]*entity.TaskInfo, error) {
+func (tr *TaskRepositoryImpl) GetListofTasks(taskQuery *entity.Task, workspace_id uint, user_id int) ([]*entity.TaskInfo, error) {
 	//var results []interface{}
 	var task []*entity.TaskInfo
 	//r1 := tr.db.Model(&entity.Task{}).Where("workspace_id = ?", workspace_id)
@@ -64,21 +70,22 @@ func (tr *TaskRepositoryImpl) GetListofTasks(taskQuery entity.Task, workspace_id
 		Joins("JOIN projects p ON u.project_id = p.id").
 		Joins("JOIN users us ON u.assignee_id = us.id").
 		Joins("JOIN user_workspaces uw ON u.workspace_id = uw.workspace_id AND uw.user_id=?", user_id)
-	if taskQuery.Status != "" {
-		r1 = r1.Where("u.status = ?", taskQuery.Status)
+	if (*taskQuery).Status != "" {
+		r1 = r1.Where("u.status = ?", (*taskQuery).Status)
 	}
-	if taskQuery.AssigneeId != 0 {
-		r1 = r1.Where("u.assignee_id = ?", taskQuery.AssigneeId)
+	if (*taskQuery).AssigneeId != 0 {
+		r1 = r1.Where("u.assignee_id = ?", (*taskQuery).AssigneeId)
 	}
-	if taskQuery.ProjectId != 0 {
-		r1 = r1.Where("u.project_id = ?", taskQuery.ProjectId)
+	if (*taskQuery).ProjectId != 0 {
+		r1 = r1.Where("u.project_id = ?", (*taskQuery).ProjectId)
 	}
-	if !taskQuery.DueDate.IsZero() {
-		r1 = r1.Where("u.due_date = ?", taskQuery.DueDate)
+	if !(*taskQuery).DueDate.IsZero() {
+		r1 = r1.Where("u.due_date = ?", (*taskQuery).DueDate)
 	}
-	if taskQuery.Name != "" {
-		r1 = r1.Where("u.name LIKE ?", "%"+taskQuery.Name+"%")
+	if (*taskQuery).Name != "" {
+		r1 = r1.Where("u.name LIKE ?", "%"+(*taskQuery).Name+"%")
 	}
+	log.Debug("Task Query project_id: ", (*taskQuery).ProjectId)
 	r1.Order("u.position ASC").Scan(&task)
 	if r1.Error != nil {
 		return nil, r1.Error
